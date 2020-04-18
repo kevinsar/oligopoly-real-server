@@ -1,0 +1,16 @@
+{
+  "files": [
+    "src/*.ts",
+    "src/shared/*.ts",
+    "src/data/*.ts",
+    "src/models/*.ts",
+    "src/enums/*.ts",
+    "src/mocks/*.ts"
+  ],
+  "compilerOptions": {
+    "noImplicitAny": true,
+    "module": "commonjs",
+"target": "es2017",
+    "watch": true
+  }
+}
