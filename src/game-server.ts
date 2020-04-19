@@ -13,6 +13,7 @@ import { randomizeArray, generateGameId, isExpired } from './shared/utils';
 import { deck } from './data/deck';
 import { Message } from './models/message';
 import { Card } from './models/card';
+import { CardType } from './enums/card-type.enum';
 
 export class GameServer {
   public static readonly PORT: number = 8080;
@@ -50,36 +51,47 @@ export class GameServer {
 
   /* Game Logic */
   actionHandler(cardAction: CardAction, actionParams: any, gameId: string) {
-    const playerName = this.activeGames[gameId].gameState.players.find((player: Player) => {
-      return player.id === actionParams.playerId;
-    }).name;
+    const playerName = this.activeGames[gameId].gameState.players.find(
+      (player: Player) => {
+        return player.id === actionParams.playerId;
+      }
+    ).name;
 
     let message = '';
     switch (cardAction) {
       case CardAction.DRAW:
         this.drawCards(gameId, actionParams);
-        message = ` drew ${actionParams.amount} cards.`
-        this.emitPlayerAction
+        message = ` drew ${actionParams.amount} cards.`;
+        this.emitPlayerAction;
         break;
       case CardAction.BUILD:
         this.buildProperty(gameId, actionParams);
-        message = ` built ${actionParams.card.name} on lot ${actionParams.lot}.`
+        message = ` built ${actionParams.card.name} on lot ${actionParams.lot + 1}.`;
         break;
       case CardAction.PLAY:
         this.addToTrash(gameId, actionParams);
-        message = ` played ${actionParams.card.name} card.`
+        message = ` played ${actionParams.card.name} card.`;
+        if (actionParams.card.name === 'Rent') {
+          message += '(';
+          for (let i = 0; i < (actionParams.card.rentColors || []).length; i++) {
+            message += `${actionParams.card.rentColors[i]}, `;
+          }
+          message += ')';
+        }
         break;
       case CardAction.TRASH:
         this.addToTrash(gameId, actionParams);
-        message = ` threw ${actionParams.card.name} in the trash.`
+        message = ` threw ${actionParams.card.name} in the trash.`;
         break;
       case CardAction.PAY:
         this.payPlayer(gameId, actionParams);
-        message = ` paid ${actionParams.playerToPay.name} with ${actionParams.card.name}.`
+        message = ` paid ${actionParams.playerToPay.name} with ${
+          actionParams.card.name
+        }.`;
         break;
       case CardAction.BANK:
         this.addToBank(gameId, actionParams);
-        message = ` added ${actionParams.card.name} to their bank.`
+        message = ` added ${actionParams.card.name} to their bank.`;
         break;
       default:
     }
@@ -88,21 +100,29 @@ export class GameServer {
     this.emitPlayerAction(gameId, message);
   }
 
-  drawCards(gameId: string, body: {playerId: number, amount: number}) {
+  drawCards(gameId: string, body: { playerId: number; amount: number }) {
     const currentGame = this.activeGames[gameId];
     const currentPlayer = currentGame.gameState.players.find((player: Player) => {
       return player.id === body.playerId;
     });
+
+    if (body.amount >= currentGame.gameState.deck.length) {
+      const trash = randomizeArray(currentGame.gameState.trash);
+      currentGame.gameState.deck = currentGame.gameState.deck.concat(trash);
+      currentGame.gameState.trash = [];
+    }
 
     for (let i = 0; i < body.amount; i++) {
       currentPlayer.hand.push(currentGame.gameState.deck.pop());
     }
   }
 
-  buildProperty(gameId: string, body: {playerId: number, card: Card, lot: number}) {
-    const currentPlayer = this.activeGames[gameId].gameState.players.find((player: Player) => {
-      return player.id === body.playerId;
-    });
+  buildProperty(gameId: string, body: { playerId: number; card: Card; lot: number }) {
+    const currentPlayer = this.activeGames[gameId].gameState.players.find(
+      (player: Player) => {
+        return player.id === body.playerId;
+      }
+    );
 
     currentPlayer.land = currentPlayer.land.map((plot: Card[]) => {
       return [...plot].filter((plotCard: Card) => {
@@ -118,7 +138,11 @@ export class GameServer {
       return unassignedCard.id !== body.card.id;
     });
 
-    currentPlayer.land[body.lot].push(body.card);
+    if (body.card.type === CardType.PROPERTY) {
+      currentPlayer.land[body.lot].push(body.card);
+    } else {
+      currentPlayer.land[body.lot].unshift(body.card);
+    }
 
     const addNewLot =
       currentPlayer.land.filter((currentLot: Card[]) => {
@@ -130,10 +154,12 @@ export class GameServer {
     }
   }
 
-  addToTrash(gameId: string, body: {playerId: number, card: Card}) {
-    const currentPlayer = this.activeGames[gameId].gameState.players.find((player: Player) => {
-      return player.id === body.playerId;
-    });
+  addToTrash(gameId: string, body: { playerId: number; card: Card }) {
+    const currentPlayer = this.activeGames[gameId].gameState.players.find(
+      (player: Player) => {
+        return player.id === body.playerId;
+      }
+    );
 
     this.activeGames[gameId].gameState.trash.push(body.card);
 
@@ -142,7 +168,15 @@ export class GameServer {
     });
   }
 
-  payPlayer(gameId: string, body: {playerId: number, playerToPay: Player, card: Card, cardLocation: CardLocation}) {
+  payPlayer(
+    gameId: string,
+    body: {
+      playerId: number;
+      playerToPay: Player;
+      card: Card;
+      cardLocation: CardLocation;
+    }
+  ) {
     const payer = this.activeGames[gameId].gameState.players.find((player: Player) => {
       return player.id === body.playerId;
     });
@@ -179,10 +213,12 @@ export class GameServer {
     }
   }
 
-  addToBank(gameId: string, body: {playerId: number, card: Card}) {
-    const currentPlayer = this.activeGames[gameId].gameState.players.find((player: Player) => {
-      return player.id === body.playerId;
-    });
+  addToBank(gameId: string, body: { playerId: number; card: Card }) {
+    const currentPlayer = this.activeGames[gameId].gameState.players.find(
+      (player: Player) => {
+        return player.id === body.playerId;
+      }
+    );
 
     currentPlayer.bank.push(body.card);
 
@@ -201,20 +237,33 @@ export class GameServer {
       if (!req.body.gameId) {
         const gameId = generateGameId(this.gamePrefix, this.activeGames);
         this.createNewGame(gameId);
-        const player = this.addPlayer({from: {name: req.body.name}, gameId} as any);
-        res.send(JSON.stringify({ success: true, route: `${this.gameRoute}/${gameId}`, player }));
+        const player = this.addPlayer({ from: { name: req.body.name }, gameId } as any);
+        res.send(
+          JSON.stringify({ success: true, route: `${this.gameRoute}/${gameId}`, player })
+        );
       } else if (
         this.activeGames[req.body.gameId] &&
         this.activeGames[req.body.gameId].gameState.status !== GameStatus.COMPLETE
       ) {
-        let player = this.activeGames[req.body.gameId].gameState.players.find((existingPlayer: Player) => {
-          return existingPlayer.name === req.body.name;
-        });
+        let player = this.activeGames[req.body.gameId].gameState.players.find(
+          (existingPlayer: Player) => {
+            return existingPlayer.name === req.body.name;
+          }
+        );
 
         if (!player) {
-          player = this.addPlayer({from: {name: req.body.name}, gameId: req.body.gameId} as any);
+          player = this.addPlayer({
+            from: { name: req.body.name },
+            gameId: req.body.gameId
+          } as any);
         }
-        res.send(JSON.stringify({ success: true, route: `${this.gameRoute}/${req.body.gameId}`, player }));
+        res.send(
+          JSON.stringify({
+            success: true,
+            route: `${this.gameRoute}/${req.body.gameId}`,
+            player
+          })
+        );
       } else {
         if (!this.activeGames[req.body.gameId]) {
           res.send(JSON.stringify({ error: 'Game does not exist.' }));
@@ -285,6 +334,22 @@ export class GameServer {
         res.send(JSON.stringify({ success: false, error: 'Game does not exist.' }));
       }
     });
+
+    this.app.post('/chat', (req, res) => {
+      console.log('Chat Message...');
+      console.log(req.body);
+      console.log(' ----- ');
+      res.setHeader('Content-Type', 'application/json');
+      if (this.activeGames[req.body.gameId]) {
+        this.chatMessageHandler(
+          req.body.gameId,
+          `${req.body.player.name}: ${req.body.message}`
+        );
+        res.send(JSON.stringify({ success: true }));
+      } else {
+        res.send(JSON.stringify({ success: false, error: 'Game does not exist.' }));
+      }
+    });
   }
 
   restartExisitingGame(gameId: string) {
@@ -326,6 +391,11 @@ export class GameServer {
     };
     this.activeGames[message.gameId].gameState.players.push(newPlayer);
     return newPlayer;
+  }
+
+  chatMessageHandler(gameId: string, message: string) {
+    this.io.to(gameId).emit('action', message);
+    console.log('Message Being Sent...');
   }
 
   emitPlayerAction(gameId: string, message: string) {

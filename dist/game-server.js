@@ -10,6 +10,7 @@ const card_location_enum_1 = require("./enums/card-location.enum");
 const utils_1 = require("./shared/utils");
 const deck_1 = require("./data/deck");
 const message_1 = require("./models/message");
+const card_type_enum_1 = require("./enums/card-type.enum");
 class GameServer {
     constructor() {
         this.activeGames = {};
@@ -43,11 +44,18 @@ class GameServer {
                 break;
             case message_type_1.CardAction.BUILD:
                 this.buildProperty(gameId, actionParams);
-                message = ` built ${actionParams.card.name} on lot ${actionParams.lot}.`;
+                message = ` built ${actionParams.card.name} on lot ${actionParams.lot + 1}.`;
                 break;
             case message_type_1.CardAction.PLAY:
                 this.addToTrash(gameId, actionParams);
                 message = ` played ${actionParams.card.name} card.`;
+                if (actionParams.card.name === 'Rent') {
+                    message += '(';
+                    for (let i = 0; i < (actionParams.card.rentColors || []).length; i++) {
+                        message += `${actionParams.card.rentColors[i]}, `;
+                    }
+                    message += ')';
+                }
                 break;
             case message_type_1.CardAction.TRASH:
                 this.addToTrash(gameId, actionParams);
@@ -71,6 +79,11 @@ class GameServer {
         const currentPlayer = currentGame.gameState.players.find((player) => {
             return player.id === body.playerId;
         });
+        if (body.amount >= currentGame.gameState.deck.length) {
+            const trash = utils_1.randomizeArray(currentGame.gameState.trash);
+            currentGame.gameState.deck = currentGame.gameState.deck.concat(trash);
+            currentGame.gameState.trash = [];
+        }
         for (let i = 0; i < body.amount; i++) {
             currentPlayer.hand.push(currentGame.gameState.deck.pop());
         }
@@ -90,7 +103,12 @@ class GameServer {
         currentPlayer.unAssigned = currentPlayer.unAssigned.filter((unassignedCard) => {
             return unassignedCard.id !== body.card.id;
         });
-        currentPlayer.land[body.lot].push(body.card);
+        if (body.card.type === card_type_enum_1.CardType.PROPERTY) {
+            currentPlayer.land[body.lot].push(body.card);
+        }
+        else {
+            currentPlayer.land[body.lot].unshift(body.card);
+        }
         const addNewLot = currentPlayer.land.filter((currentLot) => {
             return currentLot.length === 0;
         }).length === 0;
@@ -239,6 +257,19 @@ class GameServer {
                 res.send(JSON.stringify({ success: false, error: 'Game does not exist.' }));
             }
         });
+        this.app.post('/chat', (req, res) => {
+            console.log('Chat Message...');
+            console.log(req.body);
+            console.log(' ----- ');
+            res.setHeader('Content-Type', 'application/json');
+            if (this.activeGames[req.body.gameId]) {
+                this.chatMessageHandler(req.body.gameId, `${req.body.player.name}: ${req.body.message}`);
+                res.send(JSON.stringify({ success: true }));
+            }
+            else {
+                res.send(JSON.stringify({ success: false, error: 'Game does not exist.' }));
+            }
+        });
     }
     restartExisitingGame(gameId) {
         this.activeGames[gameId].gameState.trash = [];
@@ -277,6 +308,10 @@ class GameServer {
         };
         this.activeGames[message.gameId].gameState.players.push(newPlayer);
         return newPlayer;
+    }
+    chatMessageHandler(gameId, message) {
+        this.io.to(gameId).emit('action', message);
+        console.log('Message Being Sent...');
     }
     emitPlayerAction(gameId, message) {
         this.io.to(gameId).emit('action', message);
