@@ -50,24 +50,42 @@ export class GameServer {
 
   /* Game Logic */
   actionHandler(cardAction: CardAction, actionParams: any, gameId: string) {
+    const playerName = this.activeGames[gameId].gameState.players.find((player: Player) => {
+      return player.id === actionParams.playerId;
+    }).name;
+
+    let message = '';
     switch (cardAction) {
       case CardAction.DRAW:
         this.drawCards(gameId, actionParams);
+        message = ` drew ${actionParams.amount} cards.`
+        this.emitPlayerAction
         break;
       case CardAction.BUILD:
         this.buildProperty(gameId, actionParams);
+        message = ` built ${actionParams.card.name} on lot ${actionParams.lot}.`
+        break;
+      case CardAction.PLAY:
+        this.addToTrash(gameId, actionParams);
+        message = ` played ${actionParams.card.name} card.`
         break;
       case CardAction.TRASH:
         this.addToTrash(gameId, actionParams);
+        message = ` threw ${actionParams.card.name} in the trash.`
         break;
       case CardAction.PAY:
         this.payPlayer(gameId, actionParams);
+        message = ` paid ${actionParams.playerToPay.name} with ${actionParams.card.name}.`
         break;
       case CardAction.BANK:
         this.addToBank(gameId, actionParams);
+        message = ` added ${actionParams.card.name} to their bank.`
         break;
       default:
     }
+
+    message = `${playerName}${message}`;
+    this.emitPlayerAction(gameId, message);
   }
 
   drawCards(gameId: string, body: {playerId: number, amount: number}) {
@@ -234,6 +252,23 @@ export class GameServer {
       }
     });
 
+    this.app.post('/new-game', (req, res) => {
+      console.log('Start New Game In Exisiting Room... ' + req.body.gameId);
+      console.log(req.body);
+      console.log(' ----- ');
+      res.setHeader('Content-Type', 'application/json');
+      if (this.activeGames[req.body.gameId]) {
+        this.restartExisitingGame(req.body.gameId);
+        // Host game exists, send the host the game state
+        const gameState = this.activeGames[req.body.gameId].gameState as GameState;
+        gameState.success = true;
+        res.send(JSON.stringify(gameState));
+        this.sendGameState(req.body.gameId);
+      } else {
+        res.send(JSON.stringify({ success: false, error: 'Game does not exist.' }));
+      }
+    });
+
     this.app.post('/player-action', (req, res) => {
       console.log('Player Action...');
       console.log(req.body);
@@ -250,6 +285,17 @@ export class GameServer {
         res.send(JSON.stringify({ success: false, error: 'Game does not exist.' }));
       }
     });
+  }
+
+  restartExisitingGame(gameId: string) {
+    this.activeGames[gameId].gameState.trash = [];
+    this.activeGames[gameId].gameState.players.forEach((player: Player) => {
+      player.hand = [];
+      player.land = [[]];
+      player.bank = [];
+      player.unAssigned = [];
+    });
+    this.activeGames[gameId].gameState.deck = randomizeArray(deck());
   }
 
   createNewGame(gameId: string) {
@@ -280,6 +326,11 @@ export class GameServer {
     };
     this.activeGames[message.gameId].gameState.players.push(newPlayer);
     return newPlayer;
+  }
+
+  emitPlayerAction(gameId: string, message: string) {
+    this.io.to(gameId).emit('action', message);
+    console.log('Message Being Sent...');
   }
 
   emitMessage(gameId: string, message: Message) {
