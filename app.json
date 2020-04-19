@@ -1,6 +1,6 @@
 {
-  "name": "party-bee-game-server",
-  "description": "Game Server Logic for Party Bee Games.",
-  "repository": "https://ksar909@bitbucket.org/ksar909/party-bee-games-server.git",
+  "name": "oligopoly-real-server",
+  "description": "Game Server Logic for Oligopoly Real.",
+  "repository": "https://github.com/kevinsar/oligopoly-real-server.git",
   "image": "heroku/nodejs"
 }

@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.brownRents = [1, 2];
+exports.blueRents = [3, 8];
+exports.greenRents = [2, 4, 7];
+exports.lightBlueRents = [1, 2, 3];
+exports.orangeRents = [1, 3, 5];
+exports.purpleRents = [1, 2, 4];
+exports.blackRents = [1, 2, 3, 4];
+exports.redRents = [2, 3, 6];
+exports.lightGreenRents = [1, 2];
+exports.yellowRents = [2, 4, 6];

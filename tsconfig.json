@@ -10,7 +10,7 @@
   "compilerOptions": {
     "noImplicitAny": true,
     "module": "commonjs",
-"target": "es2017",
+    "target": "es2017",
     "watch": true
   }
 }
