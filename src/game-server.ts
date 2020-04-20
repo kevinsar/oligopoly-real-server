@@ -36,16 +36,15 @@ export class GameServer {
   /* Handle when a new player is connected */
   playerConnectedMessageHandler(message: Message) {
     if (this.activeGames[message.gameId]) {
-      const response = new Message(
-        null,
-        MessageType.HOST,
-        null,
-        this.activeGames[message.gameId].gameState,
-        message.gameId
+      const connectingPlayer = this.activeGames[message.gameId].gameState.players.find(
+        (player: Player) => {
+          return player.id === message.from.id;
+        }
       );
-
-      console.log('Sending Initial Connected Message!');
-      this.emitMessage(message.gameId, response);
+      const msg = `${
+        connectingPlayer ? connectingPlayer.name : message.from.name
+      } has connected.`;
+      this.emitPlayerAction(message.gameId, msg);
     }
   }
 
@@ -187,7 +186,7 @@ export class GameServer {
 
     if (body.cardLocation === CardLocation.BANK) {
       const cardToRemoveIndex = payer.bank.findIndex((bankCard: Card) => {
-        return bankCard.name === body.card.name && bankCard.value === body.card.value;
+        return bankCard.id === body.card.id;
       });
 
       payer.bank.splice(cardToRemoveIndex, 1);
@@ -197,7 +196,7 @@ export class GameServer {
       let cardLotLocationIndex = -1;
       const lotLocationIndex = payer.land.findIndex((lot: Card[]) => {
         const cardIndex = lot.findIndex((lotCard: Card) => {
-          return lotCard.name === body.card.name && lotCard.value === body.card.value;
+          return lotCard.id === body.card.id;
         });
 
         if (cardIndex > -1) {

@@ -9,7 +9,6 @@ const message_type_1 = require("./models/message-type");
 const card_location_enum_1 = require("./enums/card-location.enum");
 const utils_1 = require("./shared/utils");
 const deck_1 = require("./data/deck");
-const message_1 = require("./models/message");
 const card_type_enum_1 = require("./enums/card-type.enum");
 class GameServer {
     constructor() {
@@ -25,9 +24,11 @@ class GameServer {
     /* Handle when a new player is connected */
     playerConnectedMessageHandler(message) {
         if (this.activeGames[message.gameId]) {
-            const response = new message_1.Message(null, message_type_1.MessageType.HOST, null, this.activeGames[message.gameId].gameState, message.gameId);
-            console.log('Sending Initial Connected Message!');
-            this.emitMessage(message.gameId, response);
+            const connectingPlayer = this.activeGames[message.gameId].gameState.players.find((player) => {
+                return player.id === message.from.id;
+            });
+            const msg = `${connectingPlayer ? connectingPlayer.name : message.from.name} has connected.`;
+            this.emitPlayerAction(message.gameId, msg);
         }
     }
     /* Game Logic */
@@ -134,7 +135,7 @@ class GameServer {
         });
         if (body.cardLocation === card_location_enum_1.CardLocation.BANK) {
             const cardToRemoveIndex = payer.bank.findIndex((bankCard) => {
-                return bankCard.name === body.card.name && bankCard.value === body.card.value;
+                return bankCard.id === body.card.id;
             });
             payer.bank.splice(cardToRemoveIndex, 1);
             receiver.bank.push(body.card);
@@ -143,7 +144,7 @@ class GameServer {
             let cardLotLocationIndex = -1;
             const lotLocationIndex = payer.land.findIndex((lot) => {
                 const cardIndex = lot.findIndex((lotCard) => {
-                    return lotCard.name === body.card.name && lotCard.value === body.card.value;
+                    return lotCard.id === body.card.id;
                 });
                 if (cardIndex > -1) {
                     cardLotLocationIndex = cardIndex;
@@ -182,9 +183,16 @@ class GameServer {
                     return existingPlayer.name === req.body.name;
                 });
                 if (!player) {
-                    player = this.addPlayer({ from: { name: req.body.name }, gameId: req.body.gameId });
+                    player = this.addPlayer({
+                        from: { name: req.body.name },
+                        gameId: req.body.gameId
+                    });
                 }
-                res.send(JSON.stringify({ success: true, route: `${this.gameRoute}/${req.body.gameId}`, player }));
+                res.send(JSON.stringify({
+                    success: true,
+                    route: `${this.gameRoute}/${req.body.gameId}`,
+                    player
+                }));
             }
             else {
                 if (!this.activeGames[req.body.gameId]) {
