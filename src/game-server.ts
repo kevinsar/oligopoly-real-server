@@ -388,6 +388,11 @@ export class GameServer {
       bank: [],
       unAssigned: []
     };
+
+    for (let i = 0; i < 5; i++) {
+      newPlayer.hand.push(this.activeGames[message.gameId].gameState.deck.pop());
+    }
+
     this.activeGames[message.gameId].gameState.players.push(newPlayer);
     return newPlayer;
   }
