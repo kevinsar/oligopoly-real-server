@@ -285,6 +285,31 @@ export class GameServer {
       }
     });
 
+    this.app.get('/get-active-games', (req, res) => {
+      console.log('Get Game Ids Request...');
+      console.log(req.body);
+      console.log(' ----- ');
+      res.setHeader('Content-Type', 'application/json');
+
+      const games: {name: string, gameId: string}[] = [];
+
+      try {
+        Object.keys(this.activeGames).forEach((gameId: string) => {
+          games.push({
+            gameId,
+            name: this.activeGames[gameId] && this.activeGames[gameId].gameState && this.activeGames[gameId].gameState.players &&
+            this.activeGames[gameId].gameState.players[0] ? this.activeGames[gameId].gameState.players[0].name : ''
+          });
+        });
+        // Host game exists, send the host the game state
+        const body = { success: true, games };
+        res.send(JSON.stringify(body));
+      } catch(e) {
+        const body = { success: false, games: [] as any[] };
+        res.send(JSON.stringify(body));
+      }
+    });
+
     this.app.post('/get-game-state', (req, res) => {
       console.log('Get Game State Request...');
       console.log(req.body);
@@ -358,6 +383,10 @@ export class GameServer {
       player.land = [[]];
       player.bank = [];
       player.unAssigned = [];
+
+      for (let i = 0; i < 5; i++) {
+        player.hand.push(this.activeGames[gameId].gameState.deck.pop());
+      }
     });
     this.activeGames[gameId].gameState.deck = randomizeArray(deck());
   }
