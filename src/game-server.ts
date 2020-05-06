@@ -69,14 +69,20 @@ export class GameServer {
         break;
       case CardAction.PLAY:
         this.addToTrash(gameId, actionParams);
-        message = ` played ${actionParams.card.name} card.`;
+        message = ` played ${actionParams.card.name} card. `;
         if (actionParams.card.name === 'Rent') {
           message += '(';
           for (let i = 0; i < (actionParams.card.rentColors || []).length; i++) {
             message += `${actionParams.card.rentColors[i]}, `;
           }
-          message += ')';
+          message += ') ';
         }
+
+        if (actionParams.opponent) {
+          message += `against ${actionParams.opponent.name}`;
+        }
+
+        this.emitNotification(playerName, gameId, actionParams);
         break;
       case CardAction.TRASH:
         this.addToTrash(gameId, actionParams);
@@ -291,20 +297,25 @@ export class GameServer {
       console.log(' ----- ');
       res.setHeader('Content-Type', 'application/json');
 
-      const games: {name: string, gameId: string}[] = [];
+      const games: { name: string; gameId: string }[] = [];
 
       try {
         Object.keys(this.activeGames).forEach((gameId: string) => {
           games.push({
             gameId,
-            name: this.activeGames[gameId] && this.activeGames[gameId].gameState && this.activeGames[gameId].gameState.players &&
-            this.activeGames[gameId].gameState.players[0] ? this.activeGames[gameId].gameState.players[0].name : ''
+            name:
+              this.activeGames[gameId] &&
+              this.activeGames[gameId].gameState &&
+              this.activeGames[gameId].gameState.players &&
+              this.activeGames[gameId].gameState.players[0]
+                ? this.activeGames[gameId].gameState.players[0].name
+                : ''
           });
         });
         // Host game exists, send the host the game state
         const body = { success: true, games };
         res.send(JSON.stringify(body));
-      } catch(e) {
+      } catch (e) {
         const body = { success: false, games: [] as any[] };
         res.send(JSON.stringify(body));
       }
@@ -434,6 +445,39 @@ export class GameServer {
   emitPlayerAction(gameId: string, message: string) {
     this.io.to(gameId).emit('action', message);
     console.log('Message Being Sent...');
+  }
+
+  emitNotification(
+    playerName: string,
+    gameId: string,
+    actionParams: { playerId: number; card: Card; opponent: Player }
+  ) {
+    let message = `${playerName} played ${actionParams.card.name} card `;
+    if (actionParams.card.name === 'Rent') {
+      message += '(';
+      for (let i = 0; i < (actionParams.card.rentColors || []).length; i++) {
+        message += `${actionParams.card.rentColors[i]}, `;
+      }
+      message += ') ';
+    }
+    message += 'against you, please pay them or give property.';
+
+    const userId = actionParams.opponent ? actionParams.opponent.id : 'all';
+
+    const advancedActionCardNames = [
+      'Sly Deal',
+      'Deal Breaker',
+      'Forced Deal',
+      'Debt Collector',
+      'It`s My Birthday'
+    ];
+    const isAdvancedActionCard = advancedActionCardNames.find((name: string) => {
+      return name === actionParams.card.name;
+    });
+    if (isAdvancedActionCard || actionParams.card.type === CardType.RENT) {
+      this.io.to(gameId).emit('snackbar', { userId, message });
+      console.log('Notification Being Sent...');
+    }
   }
 
   emitMessage(gameId: string, message: Message) {

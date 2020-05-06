@@ -49,14 +49,18 @@ class GameServer {
                 break;
             case message_type_1.CardAction.PLAY:
                 this.addToTrash(gameId, actionParams);
-                message = ` played ${actionParams.card.name} card.`;
+                message = ` played ${actionParams.card.name} card. `;
                 if (actionParams.card.name === 'Rent') {
                     message += '(';
                     for (let i = 0; i < (actionParams.card.rentColors || []).length; i++) {
                         message += `${actionParams.card.rentColors[i]}, `;
                     }
-                    message += ')';
+                    message += ') ';
                 }
+                if (actionParams.opponent) {
+                    message += `against ${actionParams.opponent.name}`;
+                }
+                this.emitNotification(playerName, gameId, actionParams);
                 break;
             case message_type_1.CardAction.TRASH:
                 this.addToTrash(gameId, actionParams);
@@ -353,6 +357,26 @@ class GameServer {
     emitPlayerAction(gameId, message) {
         this.io.to(gameId).emit('action', message);
         console.log('Message Being Sent...');
+    }
+    emitNotification(playerName, gameId, actionParams) {
+        let message = `${playerName} played ${actionParams.card.name} card `;
+        if (actionParams.card.name === 'Rent') {
+            message += '(';
+            for (let i = 0; i < (actionParams.card.rentColors || []).length; i++) {
+                message += `${actionParams.card.rentColors[i]}, `;
+            }
+            message += ') ';
+        }
+        message += 'against you, please pay them or give property.';
+        const userId = actionParams.opponent ? actionParams.opponent.id : 'all';
+        const advancedActionCardNames = ['Sly Deal', 'Deal Breaker', 'Forced Deal', 'Debt Collector', 'It`s My Birthday'];
+        const isAdvancedActionCard = advancedActionCardNames.find((name) => {
+            return name === actionParams.card.name;
+        });
+        if (isAdvancedActionCard || actionParams.card.type === card_type_enum_1.CardType.RENT) {
+            this.io.to(gameId).emit('snackbar', { userId, message });
+            console.log('Notification Being Sent...');
+        }
     }
     emitMessage(gameId, message) {
         this.io.to(gameId).emit('message', message.content);
